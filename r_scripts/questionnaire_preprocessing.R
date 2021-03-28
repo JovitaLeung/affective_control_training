@@ -26,6 +26,7 @@ d1=subset(d,select = c("id","gender","age","ses","pre.post.days","iq.sum","pds.s
 names(d1)=c("subjno","gender","decimal_age","ses","test_days","iq_sum","pds")
 d1[c("subjno","gender")]=lapply(d1[c("subjno","gender")],factor)
 summary(d1)
+write.csv(d1,file="/Users/jovitaleung/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/demographics.csv")
 
 ## Tidy up ---
 t1[c("subjno","gender")]= lapply(t1[c("subjno","gender")],factor)
