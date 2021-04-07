@@ -12,7 +12,7 @@ library(readxl) #read excel file
 
 ## Import data ---
 d=read.csv("/Users/jovitaleung/Dropbox/PhD/Affective Control Training Study/ac_training/data/281019wodupl2.csv")
-colnames(d)[colnames(d)=="subjno"] <- "subjno"
+colnames(d)[colnames(d)=="ID"] <- "subjno"
 d$subjno=as.factor(d$subjno)
 d$Group=as.factor(d$Group)
 summary(d$Group)
@@ -51,9 +51,19 @@ nback=subset(d[c(1,79:117)])
 nback[,c("timeStamp_T4_1","timeStamp_T4_2","timeStamp_T4_3")] <- list(NULL)
 summary(nback)
 
-
 ## Save tasks data
 write.csv(digit, file="/Users/jovitaleung/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/digit_span.csv")
 write.csv(nback, file="/Users/jovitaleung/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/nback.csv")
 write.csv(setshift, file="/Users/jovitaleung/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/setshift.csv")
 write.csv(stroop, file="/Users/jovitaleung/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/stroop.csv")
+
+## Extract training details
+train=subset(d[c(1:9)])
+train[c("subjno","no_of_sessions_under_10_mins","no_of_sessions_over_10_mins","no_of_moodtracker_only_sessions",
+        "total_number_of_days_1_session_only","total_number_of_days_2plus_sessions","days_betw_T1T2")] = lapply(
+          train[c("subjno","no_of_sessions_under_10_mins","no_of_sessions_over_10_mins","no_of_moodtracker_only_sessions",
+                  "total_number_of_days_1_session_only","total_number_of_days_2plus_sessions","days_betw_T1T2")], 
+          factor)
+summary(train)
+write.csv(train, file="~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/training_info.csv")
+
