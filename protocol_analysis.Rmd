@@ -1,0 +1,285 @@
+---
+title: "Affective Control Training: Analyses from Protocol"
+author: "Jovita T. Leung"
+date: "28/03/2021"
+output: 
+  html_document: 
+  toc: yes
+  toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+```{r message=F, warning=F}
+rm(list=ls())
+
+# Load libraries
+library(dplyr)
+library(doBy)
+library(lmerTest) 
+library(Hmisc)
+library(anchors)
+library(car) # Anova
+library(emmeans)
+library(ggfortify)
+library(data.table)
+library(psych)
+library(ggeffects) # extract model predictions
+library(sjPlot) # make LMM summary tables
+library(jtools) # summarise LMM models
+library(ggsignif)
+library(ggpubr) # arrange plots
+library(Bolstad) # bayesian t test
+library(reshape2)
+```
+
+```{r}
+# Import data
+demo=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/demographics_group.csv")
+nback=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/nback.csv")
+train=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/training_info.csv")
+all=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/data/281019wodupl2.csv") # full data from Susanne
+```
+
+
+```{r warning=F, message=F}
+demo$X=NULL
+demo[c("subjno","gender","ses","Group")]=lapply(demo[c("subjno","gender","ses","Group")],factor)
+
+train$X=NULL
+train[c("subjno","no_of_sessions_under_10_mins","no_of_sessions_over_10_mins","no_of_moodtracker_only_sessions",
+        "total_number_of_days_1_session_only","total_number_of_days_2plus_sessions","days_betw_T1T2")] = lapply(
+          train[c("subjno","no_of_sessions_under_10_mins","no_of_sessions_over_10_mins","no_of_moodtracker_only_sessions",
+                  "total_number_of_days_1_session_only","total_number_of_days_2plus_sessions","days_betw_T1T2")], 
+          factor)
+
+nback$X=NULL
+nback$subjno=as.factor(nback$subjno)
+nback[2:37]=lapply(nback[2:37],as.numeric)
+```
+
+```{r}
+nback1=merge(demo,nback, by="subjno")
+```
+
+
+## Training groups comparison
+Following the protocol, two training groups will be compared for potential confounds before hypothesis testing. Any variables showing significant group differences at baseline will be added to subsequent group comparison as covariate. 
+
+```{r}
+# Age
+bayes.t.test(decimal_age ~ Group, demo) #no significant group difference (p=.202)
+```
+
+```{r}
+# Gender
+chisq.test(demo$gender,demo$Group) #no significant group difference (p=.616)
+```
+
+```{r}
+# Parental education
+plot(demo$ses)
+chisq.test(demo$ses, demo$Group) #no significant group difference (p=.902)
+```
+
+```{r}
+# IQ
+plot(demo$iq_sum)
+summary(glm(demo$iq_sum~demo$Group)) #no significant group difference (p=.135)
+```
+
+```{r}
+plot(demo$test_days)
+summary(glm(demo$test_days~demo$Group)) #no significant group difference (p=.360)
+```
+
+## H1: Affective control training hypothesis
+Affective control can be improved in adolescents. To investigate this hypothesis, we will compare individuals’ performances on the affective n-back task across the two training groups.
+
+```{r}
+# H1: nback - d prime 
+nback2=subset(nback1, select=c("subjno","Group","Scores.dPrimeEmo_T4_1","Scores.dPrimeEmo_T4_2"))
+nback_long<-reshape2::melt(nback2, id = c("Group", "subjno"),
+                                 measured = c("Scores.dPrimeEmo_T4_1",
+                                              "Scores.dPrimeEmo_T4_2"))
+
+nback_long$time=factor(nback_long$variable, levels=c("Scores.dPrimeEmo_T4_1","Scores.dPrimeEmo_T4_2"),
+                       labels = c("pre","post"))
+names(nback_long)[names(nback_long)=="value"]="dPrimeEmo"
+nback_long$variable=NULL
+summary(nback_long)
+
+# mean d' by group and time
+summaryBy(dPrimeEmo ~ Group + time, FUN=mean, na.rm=TRUE, data=nback_long)
+```
+```{r}
+# H1: dPrimeEmo model
+m.1= lmer(dPrimeEmo ~ Group*time + (1|subjno), 
+          data=nback_long)
+summary(m.1) # nothing significant
+```
+
+```{r}
+# H1a: nback - RT
+nback3=subset(nback1, select=c("subjno","Group","Scores.meanRTCorrHitsEmo_T4_1","Scores.meanRTCorrHitsEmo_T4_2"))
+nback_long_RT<-reshape2::melt(nback3, id = c("Group", "subjno"),
+                                 measured = c("Scores.meanRTCorrHitsEmo_T4_1",
+                                              "Scores.meanRTCorrHitsEmo_T4_2"))
+
+nback_long_RT$time=factor(nback_long_RT$variable, levels=c("Scores.meanRTCorrHitsEmo_T4_1","Scores.meanRTCorrHitsEmo_T4_2"),
+                       labels = c("pre","post"))
+names(nback_long_RT)[names(nback_long_RT)=="value"]="meanRT_emo"
+nback_long_RT$variable=NULL
+summary(nback_long_RT)
+
+# mean RT by group and time
+summaryBy(meanRT_emo ~ Group + time, FUN=mean, na.rm=TRUE, data=nback_long_RT)
+```
+
+```{r}
+# H1a: meanRT_emo model
+m.1a= lmer(meanRT_emo ~ Group*time + (1|subjno), 
+          data=nback_long_RT)
+summary(m.1a)
+```
+```{r}
+# H1a: post-hoc
+emmeans(m.1a, pairwise~time, adjust="Bonferroni") #meanRT is significantly lower post-training
+emmeans(m.1a, pairwise~time|Group, adjust="Bonferroni") #meanRT for both groups are lower post-training
+```
+Significant main effects of Time but not Group. Significant interactions between Group and Time. Mean RT is lower for both groups post-training - this is probably due to familiarity with the task so not very interesting. 
+
+
+*** 
+## H2: Affective control facets hypothesis
+AC training will improve inhibition, updating and shifting. 
+
+### Inhibition
+```{r}
+# Import data
+inhib=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/stroop.csv")
+inhib$X=NULL
+inhib$subjno=as.factor(inhib$subjno)
+
+inhib1=merge(demo,inhib, by="subjno")
+```
+
+```{r}
+# H2: Inhibition - accuracy
+inhib2=subset(inhib1, select = c("subjno","Group","Scores.accSadIncongRaw_T3_1","Scores.accSadIncongRaw_T3_2"))
+inhib_long_acc=melt(inhib2, id = c("Group","subjno"),
+                     measured = c("Scores.accSadIncongRaw_T3_1","Scores.accSadIncongRaw_T3_2"))
+
+inhib_long_acc$time=factor(inhib_long_acc$variable, levels=c("Scores.accSadIncongRaw_T3_1","Scores.accSadIncongRaw_T3_2"),
+                       labels = c("pre","post"))
+names(inhib_long_acc)[names(inhib_long_acc)=="value"]="acc_sad_incong"
+inhib_long_acc$variable=NULL
+summary(inhib_long_acc)
+
+# mean accuracy by group and time
+summaryBy(acc_sad_incong ~ Group + time, FUN= mean, na.rm=TRUE, data=inhib_long_acc)
+```
+
+```{r}
+# H2: acc_sad_incong model 
+m.2=lmer(acc_sad_incong ~ Group*time + (1|subjno), inhib_long_acc)
+summary(m.2) # Nothing significant
+```
+
+```{r}
+# H2a: Inhibition - RT
+inhib3=subset(inhib1, select = c("subjno","Group","Scores.RTSadIncong_T3_1","Scores.RTSadIncong_T3_2"))
+inhib_long_RT=melt(inhib3, id = c("Group","subjno"),
+                     measured = c("Scores.RTSadIncong_T3_1","Scores.RTSadIncong_T3_2"))
+
+inhib_long_RT$time=factor(inhib_long_RT$variable, levels=c("Scores.RTSadIncong_T3_1","Scores.RTSadIncong_T3_2"),
+                       labels = c("pre","post"))
+names(inhib_long_RT)[names(inhib_long_RT)=="value"]="RT_sad_incong"
+inhib_long_RT$variable=NULL
+summary(inhib_long_RT)
+
+# mean accuracy by group and time
+summaryBy(RT_sad_incong ~ Group + time, FUN= mean, na.rm=TRUE, data=inhib_long_RT)
+```
+
+```{r}
+# H2a: RT_sad_incong model
+m.2a=lmer(RT_sad_incong ~ Group*time + (1|subjno), inhib_long_RT)
+summary(m.2a)
+```
+
+```{r}
+# H2a: post-hoc
+emmeans(m.2a, pairwise~time, adjust="Bonferroni")
+```
+There is a significant main effect of time on sad_incong RT, where RT is lower post-training. No signification interaction with group and time. 
+
+### Updating
+```{r}
+# Import data
+update=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/digit_span.csv")
+update$X=NULL
+update$subjno=as.factor(update$subjno)
+
+update1=merge(demo,update, by="subjno")
+```
+
+```{r}
+# H2: updating - accuracy
+update2=subset(update1, select = c("subjno","Group","Scores.spanEmo_T2_1","Scores.spanEmo_T2_2"))
+update_long_acc=melt(update2, id = c("Group","subjno"),
+                     measured = c("Scores.spanEmo_T2_1","Scores.spanEmo_T2_2"))
+
+update_long_acc$time=factor(update_long_acc$variable, levels=c("Scores.spanEmo_T2_1","Scores.spanEmo_T2_2"),
+                       labels = c("pre","post"))
+names(update_long_acc)[names(update_long_acc)=="value"]="span_emo_acc"
+update_long_acc$variable=NULL
+summary(update_long_acc)
+
+# mean accuracy by group and time
+summaryBy(span_emo_acc ~ Group + time, FUN= mean, na.rm=TRUE, data=update_long_acc)
+```
+
+```{r}
+# H2: span_emo_acc model 
+m.2.update=lmer(span_emo_acc ~ Group*time + (1|subjno), update_long_acc)
+summary(m.2.update) # Nothing significant
+```
+
+### Set-shifting
+```{r}
+# Import data
+shift=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/setshift.csv")
+shift$X=NULL
+shift$subjno=as.factor(shift$subjno)
+
+shift1=merge(demo,shift, by="subjno")
+```
+
+```{r}
+# H2: shifting - accuracy
+shift2=subset(shift1, select = c("subjno","Group","Scores.emoColNumRandErr_T5_1","Scores.emoColNumRandErr_T5_2"))
+update_long_acc=melt(update2, id = c("Group","subjno"),
+                     measured = c("Scores.emoColNumRandErr_T5_1","Scores.emoColNumRandErr_T5_2"))
+
+update_long_acc$time=factor(update_long_acc$variable, levels=c("Scores.emoColNumRandErr_T5_1","Scores.emoColNumRandErr_T5_2"),
+                       labels = c("pre","post"))
+names(update_long_acc)[names(update_long_acc)=="value"]="span_emo_acc"
+update_long_acc$variable=NULL
+summary(update_long_acc)
+
+# mean accuracy by group and time
+summaryBy(span_emo_acc ~ Group + time, FUN= mean, na.rm=TRUE, data=update_long_acc)
+```
+
+```{r}
+# H2: span_emo_acc model 
+m.2.update=lmer(span_emo_acc ~ Group*time + (1|subjno), update_long_acc)
+summary(m.2.update) # Nothing significant
+```
+
+
+
