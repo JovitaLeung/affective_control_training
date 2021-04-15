@@ -15,7 +15,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Setup
 ```{r message=F, warning=F}
 rm(list=ls())
+```
 
+
+```{r message=F, warning=F}
 # Load libraries
 library(dplyr)
 library(doBy)
@@ -34,20 +37,24 @@ library(ggsignif)
 library(ggpubr) # arrange plots
 library(Bolstad) # bayesian t test
 library(reshape2)
+library(lavaan) #SEM
 ```
+
 
 ```{r}
 # Import data
-demo=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/demographics_group.csv")
-nback=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/nback.csv")
-train=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/training_info.csv")
-all=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/data/281019wodupl2.csv") # full data from Susanne
+demo=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/processed_data/demographics_group.csv")
+nback=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/processed_data/nback.csv")
+train=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/processed_data/training_info.csv")
+all=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/data/281019wodupl2.csv") # full data from Susanne
 ```
 
 
 ```{r warning=F, message=F}
 demo$X=NULL
 demo[c("subjno","gender","ses","Group")]=lapply(demo[c("subjno","gender","ses","Group")],factor)
+demo$Group=factor(demo$Group, levels = c("0","1"),
+                  labels=c("control","AffeCT"))
 
 train$X=NULL
 train[c("subjno","no_of_sessions_under_10_mins","no_of_sessions_over_10_mins","no_of_moodtracker_only_sessions",
@@ -82,17 +89,19 @@ chisq.test(demo$gender,demo$Group) #no significant group difference (p=.616)
 ```{r}
 # Parental education
 plot(demo$ses)
-chisq.test(demo$ses, demo$Group) #no significant group difference (p=.902)
+chisq.test(demo$ses, demo$Group) #noz significant group difference (p=.902)
 ```
 
 ```{r}
 # IQ
 plot(demo$iq_sum)
+bayes.t.test(iq_sum ~ Group, demo)
 summary(glm(demo$iq_sum~demo$Group)) #no significant group difference (p=.135)
 ```
 
 ```{r}
 plot(demo$test_days)
+bayes.t.test(test_days ~ Group, demo)
 summary(glm(demo$test_days~demo$Group)) #no significant group difference (p=.360)
 ```
 
@@ -101,8 +110,8 @@ Affective control can be improved in adolescents. To investigate this hypothesis
 
 ```{r}
 # H1: nback - d prime 
-nback2=subset(nback1, select=c("subjno","Group","Scores.dPrimeEmo_T4_1","Scores.dPrimeEmo_T4_2"))
-nback_long<-reshape2::melt(nback2, id = c("Group", "subjno"),
+nback2=subset(nback1, select=c("subjno","Group","decimal_age","Scores.dPrimeEmo_T4_1","Scores.dPrimeEmo_T4_2"))
+nback_long<-reshape2::melt(nback2, id = c("Group", "subjno","decimal_age"),
                                  measured = c("Scores.dPrimeEmo_T4_1",
                                               "Scores.dPrimeEmo_T4_2"))
 
@@ -110,6 +119,7 @@ nback_long$time=factor(nback_long$variable, levels=c("Scores.dPrimeEmo_T4_1","Sc
                        labels = c("pre","post"))
 names(nback_long)[names(nback_long)=="value"]="dPrimeEmo"
 nback_long$variable=NULL
+nback_long=na.omit(nback_long)
 summary(nback_long)
 
 # mean d' by group and time
@@ -119,13 +129,14 @@ summaryBy(dPrimeEmo ~ Group + time, FUN=mean, na.rm=TRUE, data=nback_long)
 # H1: dPrimeEmo model
 m.1= lmer(dPrimeEmo ~ Group*time + (1|subjno), 
           data=nback_long)
+Anova(m.1, type=3)
 summary(m.1) # nothing significant
 ```
 
 ```{r}
 # H1a: nback - RT
-nback3=subset(nback1, select=c("subjno","Group","Scores.meanRTCorrHitsEmo_T4_1","Scores.meanRTCorrHitsEmo_T4_2"))
-nback_long_RT<-reshape2::melt(nback3, id = c("Group", "subjno"),
+nback3=subset(nback1, select=c("subjno","Group","decimal_age","Scores.meanRTCorrHitsEmo_T4_1","Scores.meanRTCorrHitsEmo_T4_2"))
+nback_long_RT<-reshape2::melt(nback3, id = c("Group", "subjno","decimal_age"),
                                  measured = c("Scores.meanRTCorrHitsEmo_T4_1",
                                               "Scores.meanRTCorrHitsEmo_T4_2"))
 
@@ -133,6 +144,7 @@ nback_long_RT$time=factor(nback_long_RT$variable, levels=c("Scores.meanRTCorrHit
                        labels = c("pre","post"))
 names(nback_long_RT)[names(nback_long_RT)=="value"]="meanRT_emo"
 nback_long_RT$variable=NULL
+nback_long_RT=na.omit(nback_long_RT)
 summary(nback_long_RT)
 
 # mean RT by group and time
@@ -143,12 +155,14 @@ summaryBy(meanRT_emo ~ Group + time, FUN=mean, na.rm=TRUE, data=nback_long_RT)
 # H1a: meanRT_emo model
 m.1a= lmer(meanRT_emo ~ Group*time + (1|subjno), 
           data=nback_long_RT)
+Anova(m.1a, type=3)
 summary(m.1a)
 ```
 ```{r}
 # H1a: post-hoc
 emmeans(m.1a, pairwise~time, adjust="Bonferroni") #meanRT is significantly lower post-training
 emmeans(m.1a, pairwise~time|Group, adjust="Bonferroni") #meanRT for both groups are lower post-training
+emmeans(m.1a, pairwise~Group|time, adjust="Bonferroni") #AffeCT showed lower RT than control post-training. No difference pre-training
 ```
 Significant main effects of Time but not Group. Significant interactions between Group and Time. Mean RT is lower for both groups post-training - this is probably due to familiarity with the task so not very interesting. 
 
@@ -160,7 +174,7 @@ AC training will improve inhibition, updating and shifting.
 ### Inhibition
 ```{r}
 # Import data
-inhib=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/stroop.csv")
+inhib=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/processed_data/stroop.csv")
 inhib$X=NULL
 inhib$subjno=as.factor(inhib$subjno)
 
@@ -168,59 +182,84 @@ inhib1=merge(demo,inhib, by="subjno")
 ```
 
 ```{r}
-# H2: Inhibition - accuracy
-inhib2=subset(inhib1, select = c("subjno","Group","Scores.accSadIncongRaw_T3_1","Scores.accSadIncongRaw_T3_2"))
-inhib_long_acc=melt(inhib2, id = c("Group","subjno"),
-                     measured = c("Scores.accSadIncongRaw_T3_1","Scores.accSadIncongRaw_T3_2"))
+# H2: Inhibition - accuracy (sad)
+inhib2=subset(inhib1, select = c("subjno","Group","Scores.accSadIncongRaw_T3_1","Scores.accSadIncongRaw_T3_2", 
+                                 "Scores.accSadCongRaw_T3_1","Scores.accSadCongRaw_T3_2"))
+inhib2$sad_diff_1=inhib2$Scores.accSadIncongRaw_T3_1 - inhib2$Scores.accSadCongRaw_T3_1 #calculate difference between congruent and incongruent trials
+inhib2$sad_diff_2=inhib2$Scores.accSadIncongRaw_T3_2 - inhib2$Scores.accSadCongRaw_T3_2
+inhib2=na.omit(inhib2)
+inhib3=subset(inhib2, select = c("subjno","Group","sad_diff_1","sad_diff_2"))
 
-inhib_long_acc$time=factor(inhib_long_acc$variable, levels=c("Scores.accSadIncongRaw_T3_1","Scores.accSadIncongRaw_T3_2"),
+inhib_long_acc=melt(inhib3, id = c("Group","subjno"),
+                     measured = c("sad_diff_1","sad_diff_2"))
+
+inhib_long_acc$time=factor(inhib_long_acc$variable, levels=c("sad_diff_1","sad_diff_2"),
                        labels = c("pre","post"))
-names(inhib_long_acc)[names(inhib_long_acc)=="value"]="acc_sad_incong"
+names(inhib_long_acc)[names(inhib_long_acc)=="value"]="acc_sad_diff"
 inhib_long_acc$variable=NULL
 summary(inhib_long_acc)
 
 # mean accuracy by group and time
-summaryBy(acc_sad_incong ~ Group + time, FUN= mean, na.rm=TRUE, data=inhib_long_acc)
+summaryBy(acc_sad_diff ~ Group + time, FUN= mean, na.rm=TRUE, data=inhib_long_acc)
 ```
 
 ```{r}
 # H2: acc_sad_incong model 
-m.2=lmer(acc_sad_incong ~ Group*time + (1|subjno), inhib_long_acc)
+m.2=lmer(acc_sad_diff ~ Group*time + (1|subjno), inhib_long_acc)
 summary(m.2) # Nothing significant
 ```
+```{r}
+# plot for H2
+mod=data.frame(emmeans(m.2, pairwise ~ time|Group,adjust="Bonferroni", type="response")$emmeans)
+ggplot(inhib_long_acc, aes(Group, acc_sad_diff, color=time, fill=time))+geom_violin(alpha=0.3)+
+  geom_jitter(position=position_jitterdodge(dodge.width = 0.9), size=1, alpha=0.1)+
+  geom_errorbar(data=mod, aes(Group, emmean, ymin = lower.CL, ymax = upper.CL),width = 0.05,size  = 0.5, position = position_dodge(width=0.9))+
+  theme_bw()
+```
+
 
 ```{r}
-# H2a: Inhibition - RT
-inhib3=subset(inhib1, select = c("subjno","Group","Scores.RTSadIncong_T3_1","Scores.RTSadIncong_T3_2"))
-inhib_long_RT=melt(inhib3, id = c("Group","subjno"),
-                     measured = c("Scores.RTSadIncong_T3_1","Scores.RTSadIncong_T3_2"))
+# H2a: Inhibition - RT (sad)
+inhib4=subset(inhib1, select = c("subjno","Group","Scores.RTSadIncong_T3_1","Scores.RTSadIncong_T3_2",
+                                 "Scores.RTSadCong_T3_1","Scores.RTSadCong_T3_2"))
+inhib4$RT_diff_1=inhib4$Scores.RTSadIncong_T3_1 - inhib4$Scores.RTSadCong_T3_1
+inhib4$RT_diff_2=inhib4$Scores.RTSadIncong_T3_2 - inhib4$Scores.RTSadCong_T3_2
+inhib5=subset(inhib4, select = c("subjno","Group","RT_diff_1","RT_diff_2"))
+inhib5=na.omit(inhib5)
 
-inhib_long_RT$time=factor(inhib_long_RT$variable, levels=c("Scores.RTSadIncong_T3_1","Scores.RTSadIncong_T3_2"),
+inhib_long_RT=melt(inhib5, id = c("Group","subjno"),
+                     measured = c("RT_diff_1","RT_diff_2"))
+
+inhib_long_RT$time=factor(inhib_long_RT$variable, levels=c("RT_diff_1","RT_diff_2"),
                        labels = c("pre","post"))
-names(inhib_long_RT)[names(inhib_long_RT)=="value"]="RT_sad_incong"
+names(inhib_long_RT)[names(inhib_long_RT)=="value"]="RT_sad_diff"
 inhib_long_RT$variable=NULL
 summary(inhib_long_RT)
 
-# mean accuracy by group and time
-summaryBy(RT_sad_incong ~ Group + time, FUN= mean, na.rm=TRUE, data=inhib_long_RT)
+# mean RT by group and time
+summaryBy(RT_sad_diff ~ Group + time, FUN= mean, na.rm=TRUE, data=inhib_long_RT)
 ```
 
 ```{r}
 # H2a: RT_sad_incong model
-m.2a=lmer(RT_sad_incong ~ Group*time + (1|subjno), inhib_long_RT)
+m.2a=lmer(RT_sad_diff ~ Group*time + (1|subjno), inhib_long_RT)
 summary(m.2a)
 ```
 
 ```{r}
-# H2a: post-hoc
-emmeans(m.2a, pairwise~time, adjust="Bonferroni")
+# H2a: plot
+mod=data.frame(emmeans(m.2a, pairwise ~ time|Group, adjust="Bonferroni", type="response")$emmeans)
+ggplot(inhib_long_RT, aes(Group, RT_sad_diff, color=time, fill=time))+geom_violin(alpha=0.3)+
+  geom_jitter(position=position_jitterdodge(dodge.width = 0.9), size=1, alpha=0.1)+
+  geom_errorbar(data=mod, aes(Group, emmean, ymin = lower.CL, ymax = upper.CL),width = 0.05,size  = 0.5, position = position_dodge(width=0.9))+
+  theme_bw()
 ```
-There is a significant main effect of time on sad_incong RT, where RT is lower post-training. No signification interaction with group and time. 
+
 
 ### Updating
 ```{r}
 # Import data
-update=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/digit_span.csv")
+update=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/processed_data/digit_span.csv")
 update$X=NULL
 update$subjno=as.factor(update$subjno)
 
@@ -237,6 +276,7 @@ update_long_acc$time=factor(update_long_acc$variable, levels=c("Scores.spanEmo_T
                        labels = c("pre","post"))
 names(update_long_acc)[names(update_long_acc)=="value"]="span_emo_acc"
 update_long_acc$variable=NULL
+update_long_acc=na.omit(update_long_acc)
 summary(update_long_acc)
 
 # mean accuracy by group and time
@@ -248,11 +288,20 @@ summaryBy(span_emo_acc ~ Group + time, FUN= mean, na.rm=TRUE, data=update_long_a
 m.2.update=lmer(span_emo_acc ~ Group*time + (1|subjno), update_long_acc)
 summary(m.2.update) # Nothing significant
 ```
+```{r}
+mod=data.frame(emmeans(m.2.update, pairwise ~ time|Group, adjust="Bonferroni", type="response")$emmeans)
+ggplot(update_long_acc, aes(Group, span_emo_acc, color=time, fill=time))+ ylim(0,10)+
+  geom_violin(alpha=0.3)+
+  geom_jitter(position=position_jitterdodge(dodge.width = 0.9), size=1, alpha=0.1)+
+  geom_errorbar(data=mod, aes(Group, emmean, ymin = lower.CL, ymax = upper.CL),width = 0.05,size  = 0.5, position = position_dodge(width=0.9))+
+  theme_bw()
+```
+
 
 ### Set-shifting
 ```{r}
 # Import data
-shift=read.csv("~/Dropbox/PhD/Affective Control Training Study/ac_training/processed_data/setshift.csv")
+shift=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/processed_data/setshift.csv")
 shift$X=NULL
 shift$subjno=as.factor(shift$subjno)
 
@@ -262,24 +311,183 @@ shift1=merge(demo,shift, by="subjno")
 ```{r}
 # H2: shifting - accuracy
 shift2=subset(shift1, select = c("subjno","Group","Scores.emoColNumRandErr_T5_1","Scores.emoColNumRandErr_T5_2"))
-update_long_acc=melt(update2, id = c("Group","subjno"),
+shift_long_acc=melt(shift2, id = c("Group","subjno"),
                      measured = c("Scores.emoColNumRandErr_T5_1","Scores.emoColNumRandErr_T5_2"))
 
-update_long_acc$time=factor(update_long_acc$variable, levels=c("Scores.emoColNumRandErr_T5_1","Scores.emoColNumRandErr_T5_2"),
+shift_long_acc$time=factor(shift_long_acc$variable, levels=c("Scores.emoColNumRandErr_T5_1","Scores.emoColNumRandErr_T5_2"),
                        labels = c("pre","post"))
-names(update_long_acc)[names(update_long_acc)=="value"]="span_emo_acc"
-update_long_acc$variable=NULL
-summary(update_long_acc)
+names(shift_long_acc)[names(shift_long_acc)=="value"]="RandErr_emo_acc"
+shift_long_acc$variable=NULL
+shift_long_acc=na.omit(shift_long_acc)
+summary(shift_long_acc)
 
 # mean accuracy by group and time
-summaryBy(span_emo_acc ~ Group + time, FUN= mean, na.rm=TRUE, data=update_long_acc)
+summaryBy(RandErr_emo_acc ~ Group + time, FUN= mean, na.rm=TRUE, data=shift_long_acc)
 ```
 
 ```{r}
-# H2: span_emo_acc model 
-m.2.update=lmer(span_emo_acc ~ Group*time + (1|subjno), update_long_acc)
-summary(m.2.update) # Nothing significant
+# H2: RandErr_emo_acc model 
+m.2.shift=lmer(RandErr_emo_acc ~ Group*time + (1|subjno), shift_long_acc)
+Anova(m.2.shift, type=3)
+summary(m.2.shift) # Significant main effect of time
 ```
+```{r}
+# H2: post-hoc
+emmeans(m.2.shift, pairwise ~ time, adjust="Bonferroni")
+
+mod=data.frame(emmeans(m.2.shift, pairwise ~ time|Group, adjust="Bonferroni", type="response")$emmeans)
+ggplot(shift_long_acc, aes(Group, RandErr_emo_acc, color=time, fill=time))+
+  geom_violin(alpha=0.3)+
+  geom_jitter(position=position_jitterdodge(dodge.width = 0.9), size=1, alpha=0.1)+
+  geom_errorbar(data=mod, aes(Group, emmean, ymin = lower.CL, ymax = upper.CL),width = 0.05,size  = 0.5, position = position_dodge(width=0.9))+
+  theme_bw()
+
+
+mod=data.frame(emmeans(m.2.shift, pairwise ~ time, adjust="Bonferroni")$emmeans)
+ggplot(shift_long_acc, aes(time, RandErr_emo_acc, color=time, fill=time))+
+  geom_violin(alpha=0.3)+
+  geom_jitter(position=position_jitterdodge(), size=1, alpha=0.1)+
+  geom_errorbar(data=mod, aes(time, emmean, ymin = lower.CL, ymax = upper.CL),width = 0.05,size  = 0.5, position = position_dodge(width=0.9))+
+  theme_bw()
+```
+Significant reduction in random error post-training (pre-post: contrast=.05, SE=.02, p=.003).
+
+```{r}
+# H2a: shifting - RT
+shift3=subset(shift1, select = c("subjno","Group","Scores.emoColNumRandErrRT_T5_1","Scores.emoColNumRandErrRT_T5_2"))
+shift_long_RT=melt(shift3, id = c("Group","subjno"),
+                     measured = c("Scores.emoColNumRandErrRT_T5_1","Scores.emoColNumRandErrRT_T5_2"))
+
+shift_long_RT$time=factor(shift_long_RT$variable, levels=c("Scores.emoColNumRandErrRT_T5_1","Scores.emoColNumRandErrRT_T5_2"),
+                       labels = c("pre","post"))
+names(shift_long_RT)[names(shift_long_RT)=="value"]="RandErr_emo_RT"
+shift_long_RT$variable=NULL
+shift_long_RT=na.omit(shift_long_RT)
+summary(shift_long_RT)
+
+# mean accuracy by group and time
+summaryBy(RandErr_emo_RT ~ Group + time, FUN= mean, na.rm=TRUE, data=shift_long_RT)
+```
+
+```{r}
+# H2a: RanErr_emo_RT model
+m.2a.shift=lmer(RandErr_emo_RT ~ Group*time + (1|subjno),shift_long_RT)
+Anova(m.2a.shift, type=3)
+summary(m.2a.shift) # significant main effect of time (p >.001) and marginal interaction (p=.069)
+```
+
+```{r}
+# H2a: post-hoc
+emmeans(m.2a.shift, pairwise ~ time, adjust="Bonferroni")
+emmeans(m.2a.shift, pairwise ~ time|Group, adjust="Bonferroni")
+
+mod=data.frame(emmeans(m.2a.shift, pairwise ~ time|Group, adjust="Bonferroni", type="response")$emmeans)
+ggplot(shift_long_RT, aes(Group, RandErr_emo_RT, color=time, fill=time))+
+  geom_violin(alpha=0.3)+
+  geom_jitter(position=position_jitterdodge(dodge.width = 0.9), size=1, alpha=0.1)+
+  geom_errorbar(data=mod, aes(Group, emmean, ymin = lower.CL, ymax = upper.CL),width = 0.05,size  = 0.5, position = position_dodge(width=0.9))+
+  theme_bw()
+
+
+mod=data.frame(emmeans(m.2a.shift, pairwise ~ time, adjust="Bonferroni")$emmeans)
+ggplot(shift_long_RT, aes(time, RandErr_emo_RT, color=time, fill=time))+
+  geom_violin(alpha=0.3)+
+  geom_jitter(position=position_jitterdodge(), size=1, alpha=0.1)+
+  geom_errorbar(data=mod, aes(time, emmean, ymin = lower.CL, ymax = upper.CL),width = 0.05,size  = 0.5, position = position_dodge(width=0.9))+
+  theme_bw()
+```
+
+*** 
+## H3: Age-related change hypothesis
+Adding age as a moderator in the H1 model. 
+```{r}
+m.3= lmer(dPrimeEmo ~ Group*time*decimal_age + (1|subjno), 
+          data=nback_long)
+Anova(m.3, type=3)
+summary(m.3)
+```
+
+```{r}
+# Age as a polynomial 
+m.3a=lmer(dPrimeEmo ~ Group*time*poly(decimal_age,3) + (1|subjno),
+          data=nback_long)
+summary(m.3a)
+```
+
+
+```{r}
+# H3: post-hocs
+# Main effect of time
+emmeans(m.3, pairwise~time, adjust="Bonferroni")
+
+# group x time 
+emmeans(m.3, pairwise~time|Group, adjust="Bonferroni") #significant interactions in the model but none of the contrasts is significant - what does this mean? 
+emmeans(m.3, pairwise~Group|time, adjust="Bonferroni") #no difference between groups at both time points 
+
+table = summaryBy(dPrimeEmo ~ time+Group, nback_long, FUN=mean)
+ggplot(nback_long, aes(time, dPrimeEmo, color=time, fill=time))+facet_wrap(~Group)+
+  geom_boxplot(alpha=0.2)+geom_smooth(method='lm')+theme_bw()
+```
+
+
+```{r}
+# age x time
+emmeans(m.3,pairwise~time|decimal_age, adjust="Bonferroni")
+
+table=summaryBy(dPrimeEmo ~ decimal_age+time, nback_long, FUN=mean)
+ggplot(table, aes(decimal_age, dPrimeEmo.mean, color=time, fill=time))+
+  geom_point(alpha=0.2)+geom_smooth(method='lm')+theme_bw()
+```
+
+
+```{r}
+# time x age x group 
+table <- summaryBy(dPrimeEmo ~ decimal_age + time + Group, nback_long, FUN=mean)
+ggplot(table, aes(decimal_age, dPrimeEmo.mean, color=time, fill=time))+facet_wrap(~Group)+
+  geom_point(alpha=0.2) + geom_smooth(method = 'lm')+theme_bw()
+```
+
+## H4: Mental health hypothesis
+Increase in affective control from pre- to post-training will be associated with fewer MH problems and emotion regulation difficulties, as well as higher levels of self-reported self-control. 
+
+```{r}
+# Import questionnaire data 
+t1=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/processed_data/t1_questionnaire_scored.csv")
+t2=read.csv("~/Dropbox/PhD/04_phd-studies/Affective Control Training Study/ac_training/processed_data/t2_questionnaire_scored.csv")
+
+t1$X=NULL
+t2$X=NULL
+```
+
+```{r}
+# SDQ - tidying
+sdq_t1=subset(t1, select=c("subjno","sdq_sum_t1"))
+sdq_t2=subset(t2, select=c("subjno","sdq_sum_t2"))
+sdq=merge(sdq_t1,sdq_t2, by="subjno")
+
+sdq_long=melt(sdq, id = c("subjno"),
+              measured = c("sdq_sum_t1","sdq_sum_t2"))  
+sdq_long$time=factor(sdq_long$variable, levels = c("sdq_sum_t1","sdq_sum_t2"),
+                     labels = c("pre","post"))
+names(sdq_long)[names(sdq_long)=="value"]="sdq_sum"
+sdq_long$variable=NULL
+sdq_long=na.omit(sdq_long)
+summary(sdq_long)
+```
+
+```{r}
+nback_sdq=merge(nback_long, sdq_long, by=c("subjno","time"))
+summary(nback_sdq)
+```
+
+```{r}
+mh.1=lmer(sdq_sum~dPrimeEmo + time + decimal_age + (1|subjno),
+          data=nback_sdq)
+summary(mh.1)
+```
+
+
+
 
 
 
